@@ -8,23 +8,23 @@ const char* ssid = "Telefonia";
 const char* password = "telefonia";
 //const char* ssid = "TIMBO_VIEJO";
 //const char* password = "wilson261";
+
 String url;
 
 const int dacPin1 = 25;  // DAC1
 const int inputPin = 22; // Pin digital para leer el estado (HIGH o LOW)
-const int adcPin = 34;
-const int led1=12;
-const int led2=14;
-// Variable para almacenar el valor DAC1
-int dacValue1;
-float tension_dac=2.5;
+const int adcPin = 34;   // Pin adc para testeos
+const int led1=12;       // Led de control 1
+const int led2=14;       // Led de control 2
 
-// Variable para almacenar el valor ADC leído
-int adcValue = 0;
-// Variable para almacenar el estado del pin digital
-int inputState = 0;
-int estadoActual=LOW;
-bool antispam=false;
+int dacValue1;            // Variable para almacenar el valor DAC1
+float tension_dac=1.2;    // Valor de tension deseado
+
+int adcValue = 0;         // Variable para almacenar el valor ADC leído
+int inputState = 0;       // Variable para almacenar el estado del pin digital
+int estadoActual=LOW;     // Estado del pin 22
+bool antispam=false;      // Variable para evitar el espameo de Mensajes
+int minutos_de_espera=3;  // Cada cuantos minutos se preguntara al puerto si hay corte de luz o no
 
 void setup() {
   // Inicializa la comunicación serie
@@ -33,45 +33,43 @@ void setup() {
   int dacValue1 = aux;
   // Configura el pin GPIO26 como salida DAC con un valor fijo
   dacWrite(dacPin1, dacValue1);
-  // Configura el pin 22 como entrada digital
-  pinMode(inputPin, INPUT);
-  pinMode(led1, OUTPUT);
-  pinMode(led2, OUTPUT);
+  // Configura puertos entrada salida 
+  pinMode(inputPin, INPUT); // pin 22 como entrada digital
+  pinMode(led1, OUTPUT);    // pin 12 como salida digital
+  pinMode(led2, OUTPUT);    // pin 14 como salida digital
   // Intenta conectar al WiFi
   conectarWiFi();
 }
 
 void loop() {
-  // Leer el estado del pin digital (GPIO22)
   if (WiFi.status() != WL_CONNECTED) {
     conectarWiFi();
   }
-  int estadoActual = digitalRead(inputPin);
-  if (estadoActual == LOW && antispam==false) {
+  int estadoActual = digitalRead(inputPin); // Leer el estado del pin digital (GPIO22)
+  if (estadoActual == HIGH && antispam==false) {
     Serial.println("Hay Corte de Luz");
     digitalWrite(led1, HIGH);
     antispam=true;
     delay(5000);
-    message_to_whatsapp("Hay un corte de energía");
+    message_to_whatsapp("Fallo en el suministro de energía");
   }
-  if(estadoActual == HIGH && antispam==false){
+  if(estadoActual == LOW && antispam==false){
     Serial.println("Hay energía");
     digitalWrite(led1, LOW);
-    delay(60000); //delay(180000); //3minutos
+    delay(60000*minutos_de_espera); 
   }
 
   if(antispam==true){
-    delay(60000); //Delay 5minutos
+    delay(60000*minutos_de_espera);        //espera otros N minutos para ver el puerto.
      int estadoActual = digitalRead(inputPin);
-     if (estadoActual == LOW) {
+     if (estadoActual == HIGH) {
        Serial.println("Aun no ha vuelto la energía eléctrica.");
-       //espera otros N minutos.
     }
-    if (estadoActual == HIGH) {
+    if (estadoActual == LOW) {
       antispam=false;
       message_to_whatsapp("Energia reestablecida");
       Serial.println("Energía electrica reestablecida.");   
-    }//Termina if
+    }
   }
 }
 
@@ -99,12 +97,14 @@ void conectarWiFi() {
   }
 }
 
-void  message_to_whatsapp(String message)       // es nuestra función definida por el usuario que enviará mensajes a WhatsApp messenger.
-{
-  //agregando todos los números, su clave api, su mensaje en una url completa
-  url = "https://api.callmebot.com/whatsapp.php?phone=" + phone_number + "&apikey=" + apiKey + "&text=" + urlencode(message);
+void message_to_whatsapp(String message) {
+  int numPhones = sizeof(phone_numbers) / sizeof(phone_numbers[0]);
+  for (int i = 0; i < numPhones; i++) {
+    // Generar la URL para cada número de teléfono con su correspondiente clave API
+    url = "https://api.callmebot.com/whatsapp.php?phone=" + phone_numbers[i] + "&apikey=" + api_keys[i] + "&text=" + urlencode(message);
 
-  postData(); // llamando a postData para ejecutar la URL generada anteriormente una vez para que reciba un mensaje.
+    postData(); // Llamando a postData para ejecutar la URL generada anteriormente una vez para que reciba un mensaje.
+  }
 }
 
 void postData()     //postData es otra función definida por el usuario que se utiliza para enviar la URL mediante el método HTTP GET.
