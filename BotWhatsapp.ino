@@ -6,8 +6,6 @@
 //const char* password = "celo2018";
 const char* ssid = "Telefonia";
 const char* password = "telefonia";
-//const char* ssid = "TIMBO_VIEJO";
-//const char* password = "wilson261";
 
 String url;
 
@@ -18,13 +16,13 @@ const int led1=12;       // Led de control 1
 const int led2=14;       // Led de control 2
 
 int dacValue1;            // Variable para almacenar el valor DAC1
-float tension_dac=1.2;    // Valor de tension deseado
+float tension_dac=1.1;    // Valor de tension deseado
 
 int adcValue = 0;         // Variable para almacenar el valor ADC leído
 int inputState = 0;       // Variable para almacenar el estado del pin digital
 int estadoActual=LOW;     // Estado del pin 22
 bool antispam=false;      // Variable para evitar el espameo de Mensajes
-int minutos_de_espera=3;  // Cada cuantos minutos se preguntara al puerto si hay corte de luz o no
+int minutos_de_espera=8;  // Cada cuantos minutos se preguntara al puerto si hay corte de luz o no
 
 void setup() {
   // Inicializa la comunicación serie
@@ -42,30 +40,29 @@ void setup() {
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    conectarWiFi();
-  }
   int estadoActual = digitalRead(inputPin); // Leer el estado del pin digital (GPIO22)
-  if (estadoActual == HIGH && antispam==false) {
+  if (estadoActual == LOW && antispam==false) {
     Serial.println("Hay Corte de Luz");
     digitalWrite(led1, HIGH);
+    conectarWiFi();
     antispam=true;
     delay(5000);
-    message_to_whatsapp("Fallo en el suministro de energía");
+    message_to_whatsapp("Fallo en el suministro de energía.");
   }
-  if(estadoActual == LOW && antispam==false){
+  if(estadoActual == HIGH && antispam==false){
     Serial.println("Hay energía");
     digitalWrite(led1, LOW);
-    delay(60000*minutos_de_espera); 
+    delay(60000*3); 
   }
 
   if(antispam==true){
     delay(60000*minutos_de_espera);        //espera otros N minutos para ver el puerto.
      int estadoActual = digitalRead(inputPin);
-     if (estadoActual == HIGH) {
+     if (estadoActual == LOW) {
        Serial.println("Aun no ha vuelto la energía eléctrica.");
     }
-    if (estadoActual == LOW) {
+    if (estadoActual == HIGH) {
+      conectarWiFi();
       antispam=false;
       message_to_whatsapp("Energia reestablecida");
       Serial.println("Energía electrica reestablecida.");   
@@ -74,27 +71,50 @@ void loop() {
 }
 
 void conectarWiFi() {
-  Serial.println("Conectando al WiFi...");
-  WiFi.begin(ssid, password);
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED && retries < 20) { // Intenta durante 10 segundos
-    delay(500);
-    Serial.print(".");
-    retries++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("");
-    Serial.print("Se ha conectado al wifi con la ip: ");
-    Serial.println(WiFi.localIP());
-    digitalWrite(led2, LOW);
-    delay(8000);
+  while (true) { // Bucle infinito hasta que se conecte y haya internet
+    Serial.println("Conectando al WiFi...");
+    WiFi.begin(ssid, password);
+    int retries = 0;
+    
+    while (WiFi.status() != WL_CONNECTED && retries < 20) { // Intenta durante 10 segundos
+      delay(500);
+      Serial.print(".");
+      retries++;
+    }
 
-  } else {
-    Serial.println("");
-    Serial.println("No se pudo conectar al WiFi. Intentando nuevamente en el loop.");
-    digitalWrite(led2, HIGH);
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("");
+      Serial.print("Se ha conectado al WiFi con la IP: ");
+      Serial.println(WiFi.localIP());
+      digitalWrite(led2, LOW);
+
+      // Verificar acceso a Internet
+      if (verificarInternet()) {
+        digitalWrite(led2, LOW);
+        Serial.println("Conexión a Internet verificada.");
+        delay(8000); // Espera adicional si es necesario
+        break; // Salir del bucle si se verifica la conexión a Internet
+      } else {
+        Serial.println("Conectado al WiFi pero sin acceso a Internet. Reintentando...");
+        digitalWrite(led2, HIGH);
+      }
+    } else {
+      Serial.println("");
+      Serial.println("No se pudo conectar al WiFi. Intentando nuevamente...");
+      digitalWrite(led2, HIGH);
+    }
+
+    delay(5000); // Esperar antes de reintentar
   }
+}
+
+bool verificarInternet() {
+  HTTPClient http;
+  http.begin("http://www.google.com");
+  int httpCode = http.GET();
+  http.end();
+  
+  return (httpCode > 0);
 }
 
 void message_to_whatsapp(String message) {
